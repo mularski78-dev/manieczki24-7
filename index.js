@@ -28,7 +28,7 @@ const client = new Client({
 const TOKEN = process.env.TOKEN;
 
 // 🔊 STABILNY STREAM (działa 24/7)
-const STREAM_URL = 'http://stream.live.vc.bbcmedia.co.uk/bbc_radio_one';
+const STREAM_URL = 'https://www.youtube.com/watch?v=0v_EUOUHL4M&list=PLu0HO7zwoMMm7R_DTweC39Tr0X50gBquM';
 
 let connection;
 let player;
