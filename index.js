@@ -1,14 +1,23 @@
-const { Client, GatewayIntentBits } = require("discord.js");
-const { Player } = require("discord-player");
-const express = require("express");
+const { 
+    Client, 
+    GatewayIntentBits, 
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle 
+} = require('discord.js');
 
-// 🔧 TOKEN (ustaw w ENV na Renderze)
-const TOKEN = process.env.TOKEN;
+const {
+    joinVoiceChannel,
+    createAudioPlayer,
+    createAudioResource,
+    AudioPlayerStatus,
+    StreamType,
+    NoSubscriberBehavior
+} = require('@discordjs/voice');
 
-// 🎧 Twoja playlista
-const PLAYLIST_URL = "https://www.youtube.com/watch?v=0v_EUOUHL4M&list=PLu0HO7zwoMMm7R_DTweC39Tr0X50gBquM";
+const express = require('express');
 
-// 🤖 Discord client
+// 🔑 BOT
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -18,14 +27,19 @@ const client = new Client({
     ]
 });
 
-// 🎵 Player
-const player = new Player(client);
+const TOKEN = process.env.TOKEN;
 
-// 🌐 SERWER (WAŻNE dla Render)
+// 🔊 STREAM (radio)
+const STREAM_URL = 'http://stream.live.vc.bbcmedia.co.uk/bbc_radio_one';
+
+let connection;
+let player;
+
+// 🌐 EXPRESS (NAPRAWIA TIMEOUT RENDER)
 const app = express();
 
 app.get("/", (req, res) => {
-    res.send("Bot działa 🚀");
+    res.send("Radio bot działa 🚀");
 });
 
 const PORT = process.env.PORT || 3000;
@@ -33,58 +47,123 @@ app.listen(PORT, () => {
     console.log(`🌐 Serwer działa na porcie ${PORT}`);
 });
 
-// 🔥 LOGI
+// 🔥 LOGI BŁĘDÓW (WAŻNE)
 process.on("uncaughtException", console.error);
 process.on("unhandledRejection", console.error);
 
-// 🤖 READY
-client.once("ready", async () => {
-    console.log(`✅ Zalogowano jako ${client.user.tag}`);
-});
+// 🎛️ PANEL
+client.on('messageCreate', async message => {
+    if (message.author.bot) return;
 
-// 🎧 KOMENDA PLAY (prosta)
-client.on("messageCreate", async (message) => {
-    if (!message.guild || message.author.bot) return;
+    if (message.content === '!panel') {
 
-    if (message.content === "!play") {
-        const voiceChannel = message.member.voice.channel;
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('play').setLabel('▶️ Start').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('stop').setLabel('⛔ Stop').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('move').setLabel('🔄 Move').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('status').setLabel('📻 Status').setStyle(ButtonStyle.Secondary)
+        );
 
-        if (!voiceChannel) {
-            return message.reply("Wejdź na kanał głosowy!");
-        }
-
-        const queue = player.nodes.create(message.guild, {
-            metadata: {
-                channel: message.channel
-            }
+        await message.channel.send({
+            content: '📻 PANEL RADIA',
+            components: [row]
         });
-
-        try {
-            if (!queue.connection) {
-                await queue.connect(voiceChannel);
-            }
-        } catch {
-            queue.destroy();
-            return message.reply("Nie mogę połączyć się z kanałem!");
-        }
-
-        const result = await player.search(PLAYLIST_URL, {
-            requestedBy: message.author
-        });
-
-        if (!result.hasPlaylist()) {
-            return message.reply("Nie znaleziono playlisty!");
-        }
-
-        queue.addTrack(result.playlist.tracks);
-
-        if (!queue.node.isPlaying()) {
-            await queue.node.play();
-        }
-
-        message.reply(`🎧 Odtwarzam playlistę: **${result.playlist.title}**`);
     }
 });
 
-// 🔐 LOGIN
+// 🎛️ BUTTONY
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isButton()) return;
+
+    const channel = interaction.member.voice.channel;
+
+    // ▶️ START
+    if (interaction.customId === 'play') {
+        if (!channel) {
+            return interaction.reply({ content: '❌ Wejdź na voice!', ephemeral: true });
+        }
+
+        try {
+            if (connection) connection.destroy();
+
+            connection = joinVoiceChannel({
+                channelId: channel.id,
+                guildId: interaction.guild.id,
+                adapterCreator: interaction.guild.voiceAdapterCreator,
+                selfDeaf: false
+            });
+
+            player = createAudioPlayer({
+                behaviors: { noSubscriber: NoSubscriberBehavior.Play }
+            });
+
+            connection.subscribe(player);
+
+            const resource = createAudioResource(STREAM_URL, {
+                inputType: StreamType.Arbitrary
+            });
+
+            player.play(resource);
+
+            // 🔁 AUTO RECONNECT (WAŻNE)
+            player.on(AudioPlayerStatus.Idle, () => {
+                player.play(createAudioResource(STREAM_URL, {
+                    inputType: StreamType.Arbitrary
+                }));
+            });
+
+            await interaction.reply(`▶️ Radio gra na ${channel.name}`);
+
+        } catch (err) {
+            console.error(err);
+            interaction.reply({ content: '❌ Błąd podczas uruchamiania radia', ephemeral: true });
+        }
+    }
+
+    // ⛔ STOP
+    if (interaction.customId === 'stop') {
+        try {
+            if (connection) {
+                connection.destroy();
+                connection = null;
+            }
+
+            await interaction.reply('⛔ Radio zatrzymane');
+
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    // 🔄 MOVE
+    if (interaction.customId === 'move') {
+        if (!channel) {
+            return interaction.reply({ content: '❌ Wejdź na voice!', ephemeral: true });
+        }
+
+        if (connection) connection.destroy();
+
+        connection = joinVoiceChannel({
+            channelId: channel.id,
+            guildId: interaction.guild.id,
+            adapterCreator: interaction.guild.voiceAdapterCreator
+        });
+
+        await interaction.reply(`🔄 Przeniesiono na ${channel.name}`);
+    }
+
+    // 📻 STATUS
+    if (interaction.customId === 'status') {
+        if (connection) {
+            interaction.reply('📻 Radio gra');
+        } else {
+            interaction.reply('❌ Radio wyłączone');
+        }
+    }
+});
+
+client.once('ready', () => {
+    console.log(`✅ Zalogowano jako ${client.user.tag}`);
+});
+
 client.login(TOKEN);
