@@ -1,4 +1,11 @@
-const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { 
+    Client, 
+    GatewayIntentBits, 
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle 
+} = require('discord.js');
+
 const {
     joinVoiceChannel,
     createAudioPlayer,
@@ -7,14 +14,6 @@ const {
     StreamType,
     NoSubscriberBehavior
 } = require('@discordjs/voice');
-const { spawn } = require('child_process');
-
-// 🌐 24/7
-const express = require('express');
-const app = express();
-
-app.get('/', (req, res) => res.send('Bot działa 24/7 🎧'));
-app.listen(process.env.PORT || 3000);
 
 // 🔑 BOT
 const client = new Client({
@@ -28,8 +27,8 @@ const client = new Client({
 
 const TOKEN = process.env.TOKEN;
 
-// 🔊 TWÓJ STREAM
-const STREAM_URL = 'https://playback.media-streaming.soundcloud.cloud/nXLHSIMDt5ft/aac_160k/8f825a47-8b82-4256-ab81-19806241b217/playlist.m3u8?expires=1775587688&Policy=eyJTdGF0ZW1lbnQiOlt7IlJlc291cmNlIjoiaHR0cHM6Ly9wbGF5YmFjay5tZWRpYS1zdHJlYW1pbmcuc291bmRjbG91ZC5jbG91ZC9uWExIU0lNRHQ1ZnQvYWFjXzE2MGsvOGY4MjVhNDctOGI4Mi00MjU2LWFiODEtMTk4MDYyNDFiMjE3L3BsYXlsaXN0Lm0zdTg~ZXhwaXJlcz0xNzc1NTg3Njg4IiwiQ29uZGl0aW9uIjp7IkRhdGVMZXNzVGhhbiI6eyJBV1M6RXBvY2hUaW1lIjoxNzc1NTgwNjA4fX19XX0_&Signature=Wh-b-WZV87hdYkfehqV~q2wwFZgnq2yDqY34m2T13DrktjoMqZnq3CfMdmBTyPd27E85W6knwGB9eIWtyXVUTq~URm9F6DM8k-1WtzuP3NtGwBdhNektVL08XYJ~s4ry5JF0jzVbK1jUDXdcW9cKlZunda6H-W6VAnlVf~pabJlbKEDdsI5DeFV04E8Cm8GS2l8NrKmZBEOAdEHARNaqo4D4jiNisORCBgBD2iqlRfIL767uYTq6~tNniXgmIjJ9izFZs7clJgQEa-G2N14sic6W3-2Z4ftIHU18iRuK9GXJVzii0cBL13lsBJu6oATmRoaBgKHQX6pDrJzT9uxE8Q__&Key-Pair-Id=K34606QXLEIRF3';
+// 🔊 STABILNY STREAM (działa 24/7)
+const STREAM_URL = 'http://stream.live.vc.bbcmedia.co.uk/bbc_radio_one';
 
 let connection;
 let player;
@@ -52,7 +51,7 @@ client.on('messageCreate', async message => {
     }
 });
 
-// 🎛️ OBSŁUGA KLIKNIĘĆ
+// 🎛️ BUTTONY
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
 
@@ -75,7 +74,12 @@ client.on('interactionCreate', async interaction => {
         });
 
         connection.subscribe(player);
-        playRadio();
+
+        const resource = createAudioResource(STREAM_URL, {
+            inputType: StreamType.Arbitrary
+        });
+
+        player.play(resource);
 
         interaction.reply(`▶️ Radio gra na ${channel.name}`);
     }
@@ -85,6 +89,8 @@ client.on('interactionCreate', async interaction => {
         if (connection) {
             connection.destroy();
             interaction.reply('⛔ Radio zatrzymane');
+        } else {
+            interaction.reply({ content: '❌ Radio nie działa', ephemeral: true });
         }
     }
 
@@ -100,7 +106,6 @@ client.on('interactionCreate', async interaction => {
             adapterCreator: interaction.guild.voiceAdapterCreator
         });
 
-        connection.subscribe(player);
         interaction.reply(`🔄 Przeniesiono na ${channel.name}`);
     }
 
@@ -113,28 +118,6 @@ client.on('interactionCreate', async interaction => {
         }
     }
 });
-
-// 🎧 RADIO
-function playRadio() {
-    const ffmpeg = spawn('ffmpeg', [
-        '-i', STREAM_URL,
-        '-analyzeduration', '0',
-        '-loglevel', '0',
-        '-f', 's16le',
-        '-ar', '48000',
-        '-ac', '2',
-        'pipe:1'
-    ]);
-
-    const resource = createAudioResource(ffmpeg.stdout, {
-        inputType: StreamType.Raw
-    });
-
-    player.play(resource);
-
-    player.on(AudioPlayerStatus.Idle, () => playRadio());
-    player.on('error', () => playRadio());
-}
 
 client.once('ready', () => {
     console.log(`✅ Zalogowano jako ${client.user.tag}`);
