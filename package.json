@@ -1,18 +1,17 @@
 {
   "name": "bot-muzyczny",
   "version": "1.0.0",
-  "description": "",
+  "description": "Discord radio bot",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@discordjs/voice": "^0.19.2",
-    "discord.js": "^14.26.2"
+    "discord.js": "^14.26.2",
+    "@discordjs/voice": "^0.19.2"
   }
 }
