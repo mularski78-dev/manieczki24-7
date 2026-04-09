@@ -14,7 +14,7 @@ const { spawn } = require('child_process');
 const express = require('express');
 const ffmpegPath = require('ffmpeg-static');
 
-// 🌐 SERWER
+// 🌐 SERWER (RENDER)
 const app = express();
 app.get('/', (req, res) => res.send('Bot działa 24/7 🎧'));
 
@@ -33,8 +33,8 @@ const client = new Client({
 
 const TOKEN = process.env.TOKEN;
 
-// 🔊 STREAM
-const STREAM_URL = 'http://195.150.20.8/PPRZEBOJE';
+// 🔊 STREAM (PEWNIAK TESTOWY)
+const STREAM_URL = 'http://stream.radioparadise.com/mp3-192';
 
 let connection;
 let player;
@@ -122,7 +122,7 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// 🎧 RADIO (NAPRAWIONE AUDIO)
+// 🎧 RADIO (FINAL FIX – OPUS)
 function playRadio() {
 
     if (!player) return;
@@ -133,28 +133,21 @@ function playRadio() {
         '-reconnect_delay_max', '5',
         '-i', STREAM_URL,
         '-vn',
-        '-loglevel', '0',
-        '-f', 's16le',
-        '-ar', '48000',
-        '-ac', '2',
+        '-c:a', 'libopus',
+        '-f', 'opus',
         'pipe:1'
     ]);
 
     const resource = createAudioResource(ffmpeg.stdout, {
-        inputType: StreamType.Raw,
-        inlineVolume: true
+        inputType: StreamType.Opus
     });
-
-    // 🔥 KLUCZOWE – głośność
-    resource.volume.setVolume(1);
 
     player.removeAllListeners();
 
     player.play(resource);
 
-    // 🔍 DEBUG
-    player.on('stateChange', (oldState, newState) => {
-        console.log(`PLAYER: ${oldState.status} -> ${newState.status}`);
+    player.on(AudioPlayerStatus.Playing, () => {
+        console.log('🔥 AUDIO DZIAŁA');
     });
 
     player.on(AudioPlayerStatus.Idle, () => {
