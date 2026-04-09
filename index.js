@@ -1,25 +1,27 @@
+process.env.OPUS_ENGINE = 'opusscript';
+
 const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const {
     joinVoiceChannel,
     createAudioPlayer,
     createAudioResource,
     AudioPlayerStatus,
-    NoSubscriberBehavior,
-    StreamType
+    StreamType,
+    NoSubscriberBehavior
 } = require('@discordjs/voice');
 
 const { spawn } = require('child_process');
 const express = require('express');
 const ffmpegPath = require('ffmpeg-static');
 
-// 🌐 24/7
+// 🌐 SERWER 24/7
 const app = express();
 app.get('/', (req, res) => res.send('Bot działa 24/7 🎧'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log('Serwer działa na porcie', PORT));
 
-// 🔑 BOT
+// 🤖 BOT
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -37,7 +39,7 @@ const STREAM_URL = 'https://forum.radioparty.pl:8005/stream64aac';
 let connection;
 let player;
 
-// 🎛️ PANEL
+// 📻 PANEL
 client.on('messageCreate', async message => {
     if (message.content === '!panel') {
 
@@ -54,11 +56,11 @@ client.on('messageCreate', async message => {
     }
 });
 
-// 🎛️ PRZYCISKI
+// 🎛️ INTERAKCJE
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
 
-    const voiceChannel = interaction.member.voice.channel;
+    const voiceChannel = interaction.member?.voice?.channel;
 
     // ▶️ START
     if (interaction.customId === 'play') {
@@ -70,12 +72,15 @@ client.on('interactionCreate', async interaction => {
             });
         }
 
+        await interaction.deferReply();
+
         if (connection) connection.destroy();
 
         connection = joinVoiceChannel({
             channelId: voiceChannel.id,
             guildId: interaction.guild.id,
-            adapterCreator: interaction.guild.voiceAdapterCreator
+            adapterCreator: interaction.guild.voiceAdapterCreator,
+            selfDeaf: false
         });
 
         player = createAudioPlayer({
@@ -86,11 +91,13 @@ client.on('interactionCreate', async interaction => {
 
         playRadio();
 
-        interaction.reply(`▶️ Radio gra na ${voiceChannel.name}`);
+        await interaction.editReply(`▶️ Radio gra na ${voiceChannel.name}`);
     }
 
     // ⛔ STOP
     if (interaction.customId === 'stop') {
+
+        await interaction.deferReply();
 
         if (connection) {
             connection.destroy();
@@ -99,16 +106,21 @@ client.on('interactionCreate', async interaction => {
 
         if (player) player.stop();
 
-        interaction.reply('⛔ Radio zatrzymane');
+        await interaction.editReply('⛔ Radio zatrzymane');
     }
 
     // 📻 STATUS
     if (interaction.customId === 'status') {
-        interaction.reply(connection ? '📻 Radio gra' : '❌ Radio wyłączone');
+
+        await interaction.deferReply();
+
+        await interaction.editReply(
+            connection ? '📻 Radio gra' : '❌ Radio wyłączone'
+        );
     }
 });
 
-// 🎧 RADIO (NAPRAWIONE)
+// 🎧 RADIO
 function playRadio() {
 
     if (!player) return;
@@ -132,7 +144,13 @@ function playRadio() {
 
     player.play(resource);
 
-    ffmpeg.on('error', console.error);
+    player.on(AudioPlayerStatus.Idle, () => {
+        setTimeout(playRadio, 1000);
+    });
+
+    player.on('error', () => {
+        setTimeout(playRadio, 1000);
+    });
 }
 
 // ✅ READY
