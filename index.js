@@ -34,7 +34,7 @@ const client = new Client({
 const TOKEN = process.env.TOKEN;
 
 // 🔊 STREAM
-const STREAM_URL = 'https://forum.radioparty.pl:8005/stream64aac';
+const STREAM_URL = 'http://stream-uk1.radioparadise.com/aac-320';
 
 let connection;
 let player;
