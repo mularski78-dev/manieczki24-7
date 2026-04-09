@@ -4,7 +4,6 @@ const {
     createAudioPlayer,
     createAudioResource,
     AudioPlayerStatus,
-    StreamType,
     NoSubscriberBehavior
 } = require('@discordjs/voice');
 
@@ -108,7 +107,7 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// 🎧 RADIO
+// 🎧 RADIO (POPRAWIONE)
 function playRadio() {
 
     if (!player) return;
@@ -118,28 +117,19 @@ function playRadio() {
         '-reconnect_streamed', '1',
         '-reconnect_delay_max', '5',
         '-i', STREAM_URL,
+        '-vn',
+        '-loglevel', '0',
         '-f', 's16le',
         '-ar', '48000',
         '-ac', '2',
         'pipe:1'
     ]);
 
-    const resource = createAudioResource(ffmpeg.stdout, {
-        inputType: StreamType.Raw
-    });
+    const resource = createAudioResource(ffmpeg.stdout);
 
     player.play(resource);
 
-    player.removeAllListeners(AudioPlayerStatus.Idle);
-    player.removeAllListeners('error');
-
-    player.on(AudioPlayerStatus.Idle, () => {
-        setTimeout(playRadio, 1000);
-    });
-
-    player.on('error', () => {
-        setTimeout(playRadio, 1000);
-    });
+    ffmpeg.on('error', console.error);
 }
 
 // ✅ READY
