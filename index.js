@@ -14,7 +14,7 @@ const { spawn } = require('child_process');
 const express = require('express');
 const ffmpegPath = require('ffmpeg-static');
 
-// 🌐 SERWER 24/7
+// 🌐 SERWER (RENDER WYMAGA)
 const app = express();
 app.get('/', (req, res) => res.send('Bot działa 24/7 🎧'));
 
@@ -33,8 +33,8 @@ const client = new Client({
 
 const TOKEN = process.env.TOKEN;
 
-// 🔊 STREAM
-const STREAM_URL = 'http://stream-uk1.radioparadise.com/aac-320';
+// 🔊 STREAM (MOŻESZ ZMIENIĆ)
+const STREAM_URL = 'https://forum.radioparty.pl:8005/stream64aac';
 
 let connection;
 let player;
@@ -60,63 +60,74 @@ client.on('messageCreate', async message => {
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
 
-    const voiceChannel = interaction.member?.voice?.channel;
+    try {
+        const voiceChannel = interaction.member?.voice?.channel;
 
-    // ▶️ START
-    if (interaction.customId === 'play') {
+        // ▶️ START
+        if (interaction.customId === 'play') {
 
-        if (!voiceChannel) {
-            return interaction.reply({
-                content: '❌ Wejdź na kanał głosowy!',
-                ephemeral: true
+            if (!voiceChannel) {
+                return interaction.reply({
+                    content: '❌ Wejdź na kanał głosowy!',
+                    ephemeral: true
+                });
+            }
+
+            if (!interaction.deferred && !interaction.replied) {
+                await interaction.deferReply();
+            }
+
+            if (connection) connection.destroy();
+
+            connection = joinVoiceChannel({
+                channelId: voiceChannel.id,
+                guildId: interaction.guild.id,
+                adapterCreator: interaction.guild.voiceAdapterCreator,
+                selfDeaf: false
             });
+
+            player = createAudioPlayer({
+                behaviors: { noSubscriber: NoSubscriberBehavior.Play }
+            });
+
+            connection.subscribe(player);
+
+            playRadio();
+
+            await interaction.editReply(`▶️ Radio gra na ${voiceChannel.name}`);
         }
 
-        await interaction.deferReply();
+        // ⛔ STOP
+        if (interaction.customId === 'stop') {
 
-        if (connection) connection.destroy();
+            if (!interaction.deferred && !interaction.replied) {
+                await interaction.deferReply();
+            }
 
-        connection = joinVoiceChannel({
-            channelId: voiceChannel.id,
-            guildId: interaction.guild.id,
-            adapterCreator: interaction.guild.voiceAdapterCreator,
-            selfDeaf: false
-        });
+            if (connection) {
+                connection.destroy();
+                connection = null;
+            }
 
-        player = createAudioPlayer({
-            behaviors: { noSubscriber: NoSubscriberBehavior.Play }
-        });
+            if (player) player.stop();
 
-        connection.subscribe(player);
-
-        playRadio();
-
-        await interaction.editReply(`▶️ Radio gra na ${voiceChannel.name}`);
-    }
-
-    // ⛔ STOP
-    if (interaction.customId === 'stop') {
-
-        await interaction.deferReply();
-
-        if (connection) {
-            connection.destroy();
-            connection = null;
+            await interaction.editReply('⛔ Radio zatrzymane');
         }
 
-        if (player) player.stop();
+        // 📻 STATUS
+        if (interaction.customId === 'status') {
 
-        await interaction.editReply('⛔ Radio zatrzymane');
-    }
+            if (!interaction.deferred && !interaction.replied) {
+                await interaction.deferReply();
+            }
 
-    // 📻 STATUS
-    if (interaction.customId === 'status') {
+            await interaction.editReply(
+                connection ? '📻 Radio gra' : '❌ Radio wyłączone'
+            );
+        }
 
-        await interaction.deferReply();
-
-        await interaction.editReply(
-            connection ? '📻 Radio gra' : '❌ Radio wyłączone'
-        );
+    } catch (err) {
+        console.error(err);
     }
 });
 
@@ -131,7 +142,7 @@ function playRadio() {
         '-reconnect_delay_max', '5',
         '-i', STREAM_URL,
         '-vn',
-        '-loglevel', '0',
+        '-acodec', 'pcm_s16le',
         '-f', 's16le',
         '-ar', '48000',
         '-ac', '2',
@@ -142,6 +153,8 @@ function playRadio() {
         inputType: StreamType.Raw
     });
 
+    player.removeAllListeners();
+
     player.play(resource);
 
     player.on(AudioPlayerStatus.Idle, () => {
@@ -150,6 +163,10 @@ function playRadio() {
 
     player.on('error', () => {
         setTimeout(playRadio, 1000);
+    });
+
+    ffmpeg.stderr.on('data', data => {
+        console.log('FFMPEG:', data.toString());
     });
 }
 
