@@ -14,14 +14,20 @@ const { spawn } = require('child_process');
 const express = require('express');
 const ffmpegPath = require('ffmpeg-static');
 
-// 🌐 SERWER (RENDER)
+
+// =====================
+// 🌐 EXPRESS (RENDER KEEP ALIVE)
+// =====================
 const app = express();
 app.get('/', (req, res) => res.send('Bot działa 24/7 🎧'));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('Serwer działa na porcie', PORT));
+app.listen(PORT, () => console.log('🌐 Serwer działa na porcie', PORT));
 
-// 🤖 BOT
+
+// =====================
+// 🤖 DISCORD BOT
+// =====================
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -33,37 +39,61 @@ const client = new Client({
 
 const TOKEN = process.env.TOKEN;
 
-// 🔊 STREAM (PEWNIAK TESTOWY)
+
+// =====================
+// 📻 RADIO (STABILNY STREAM)
+// =====================
 const STREAM_URL = 'http://stream.radioparadise.com/mp3-192';
 
-let connection;
-let player;
+let connection = null;
+let player = null;
+let restarting = false;
 
+
+// =====================
 // 📻 PANEL
-client.on('messageCreate', async message => {
-    if (message.content === '!panel') {
+// =====================
+client.on('messageCreate', async (message) => {
+    if (message.content !== '!panel') return;
 
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('play').setLabel('▶️ Start').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('stop').setLabel('⛔ Stop').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('status').setLabel('📻 Status').setStyle(ButtonStyle.Secondary)
-        );
+    const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('play')
+            .setLabel('▶️ START')
+            .setStyle(ButtonStyle.Success),
 
-        message.channel.send({
-            content: '📻 PANEL RADIA',
-            components: [row]
-        });
-    }
+        new ButtonBuilder()
+            .setCustomId('stop')
+            .setLabel('⛔ STOP')
+            .setStyle(ButtonStyle.Danger),
+
+        new ButtonBuilder()
+            .setCustomId('status')
+            .setLabel('📡 STATUS')
+            .setStyle(ButtonStyle.Secondary)
+    );
+
+    message.channel.send({
+        content: '📻 **PANEL RADIA 24/7**',
+        components: [row]
+    });
 });
 
-// 🎛️ INTERAKCJE
-client.on('interactionCreate', async interaction => {
+
+// =====================
+// 🎛️ INTERACTIONS (FIX 10062)
+// =====================
+client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
 
     try {
-        const voiceChannel = interaction.member?.voice?.channel;
 
+        // =====================
+        // ▶️ START
+        // =====================
         if (interaction.customId === 'play') {
+
+            const voiceChannel = interaction.member?.voice?.channel;
 
             if (!voiceChannel) {
                 return interaction.reply({
@@ -74,7 +104,10 @@ client.on('interactionCreate', async interaction => {
 
             await interaction.deferReply();
 
-            if (connection) connection.destroy();
+            if (connection) {
+                try { connection.destroy(); } catch {}
+                connection = null;
+            }
 
             connection = joinVoiceChannel({
                 channelId: voiceChannel.id,
@@ -84,47 +117,67 @@ client.on('interactionCreate', async interaction => {
             });
 
             player = createAudioPlayer({
-                behaviors: { noSubscriber: NoSubscriberBehavior.Play }
+                behaviors: {
+                    noSubscriber: NoSubscriberBehavior.Play
+                }
             });
 
             connection.subscribe(player);
 
-            playRadio();
+            startRadio();
 
-            await interaction.editReply(`▶️ Radio gra na ${voiceChannel.name}`);
+            await interaction.editReply(`▶️ Radio działa na: **${voiceChannel.name}**`);
         }
 
+
+        // =====================
+        // ⛔ STOP
+        // =====================
         if (interaction.customId === 'stop') {
 
             await interaction.deferReply();
 
-            if (connection) {
-                connection.destroy();
+            try {
+                if (connection) connection.destroy();
                 connection = null;
-            }
 
-            if (player) player.stop();
+                if (player) player.stop();
+                player = null;
+
+            } catch {}
 
             await interaction.editReply('⛔ Radio zatrzymane');
         }
 
+
+        // =====================
+        // 📡 STATUS
+        // =====================
         if (interaction.customId === 'status') {
 
             await interaction.deferReply();
 
             await interaction.editReply(
-                connection ? '📻 Radio gra' : '❌ Radio wyłączone'
+                connection ? '📡 Radio: **AKTYWNE**' : '❌ Radio: **OFFLINE**'
             );
         }
 
     } catch (err) {
-        console.error(err);
+        console.error('INTERACTION ERROR:', err);
+
+        if (interaction.deferred || interaction.replied) {
+            await interaction.followUp({ content: '❌ Błąd interakcji', ephemeral: true });
+        } else {
+            await interaction.reply({ content: '❌ Błąd interakcji', ephemeral: true });
+        }
     }
 });
 
-// 🎧 RADIO (FINAL FIX – OPUS)
-function playRadio() {
 
+// =====================
+// 🎧 RADIO ENGINE (STABILNY + AUTO RECONNECT)
+// =====================
+function startRadio() {
     if (!player) return;
 
     const ffmpeg = spawn(ffmpegPath, [
@@ -142,25 +195,37 @@ function playRadio() {
         inputType: StreamType.Opus
     });
 
-    player.removeAllListeners();
-
     player.play(resource);
 
+    player.removeAllListeners();
+
     player.on(AudioPlayerStatus.Playing, () => {
-        console.log('🔥 AUDIO DZIAŁA');
+        console.log('🔥 RADIO GRA');
     });
 
     player.on(AudioPlayerStatus.Idle, () => {
-        setTimeout(playRadio, 1000);
+        if (restarting) return;
+
+        restarting = true;
+        setTimeout(() => {
+            restarting = false;
+            startRadio();
+        }, 2000);
     });
 
     player.on('error', (err) => {
-        console.error('PLAYER ERROR:', err);
-        setTimeout(playRadio, 1000);
+        console.error('❌ PLAYER ERROR:', err);
+
+        setTimeout(() => {
+            startRadio();
+        }, 2000);
     });
 }
 
+
+// =====================
 // ✅ READY
+// =====================
 client.once('ready', () => {
     console.log(`✅ Zalogowano jako ${client.user.tag}`);
 });
