@@ -1,3 +1,5 @@
+process.env.OPUS_ENGINE = 'opusscript';
+
 const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const {
     joinVoiceChannel,
@@ -107,7 +109,7 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// 🎧 RADIO (POPRAWIONE)
+// 🎧 RADIO (NAPRAWIONE)
 function playRadio() {
 
     if (!player) return;
