@@ -1,12 +1,11 @@
-process.env.OPUS_ENGINE = 'opusscript';
-
 const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const {
     joinVoiceChannel,
     createAudioPlayer,
     createAudioResource,
     AudioPlayerStatus,
-    NoSubscriberBehavior
+    NoSubscriberBehavior,
+    StreamType
 } = require('@discordjs/voice');
 
 const { spawn } = require('child_process');
@@ -127,7 +126,9 @@ function playRadio() {
         'pipe:1'
     ]);
 
-    const resource = createAudioResource(ffmpeg.stdout);
+    const resource = createAudioResource(ffmpeg.stdout, {
+        inputType: StreamType.Raw
+    });
 
     player.play(resource);
 
