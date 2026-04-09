@@ -14,7 +14,7 @@ const { spawn } = require('child_process');
 const express = require('express');
 const ffmpegPath = require('ffmpeg-static');
 
-// 🌐 SERWER (RENDER WYMAGA)
+// 🌐 SERWER
 const app = express();
 app.get('/', (req, res) => res.send('Bot działa 24/7 🎧'));
 
@@ -33,7 +33,7 @@ const client = new Client({
 
 const TOKEN = process.env.TOKEN;
 
-// 🔊 STREAM (MOŻESZ ZMIENIĆ)
+// 🔊 STREAM
 const STREAM_URL = 'https://forum.radioparty.pl:8005/stream64aac';
 
 let connection;
@@ -63,7 +63,6 @@ client.on('interactionCreate', async interaction => {
     try {
         const voiceChannel = interaction.member?.voice?.channel;
 
-        // ▶️ START
         if (interaction.customId === 'play') {
 
             if (!voiceChannel) {
@@ -73,9 +72,7 @@ client.on('interactionCreate', async interaction => {
                 });
             }
 
-            if (!interaction.deferred && !interaction.replied) {
-                await interaction.deferReply();
-            }
+            await interaction.deferReply();
 
             if (connection) connection.destroy();
 
@@ -97,12 +94,9 @@ client.on('interactionCreate', async interaction => {
             await interaction.editReply(`▶️ Radio gra na ${voiceChannel.name}`);
         }
 
-        // ⛔ STOP
         if (interaction.customId === 'stop') {
 
-            if (!interaction.deferred && !interaction.replied) {
-                await interaction.deferReply();
-            }
+            await interaction.deferReply();
 
             if (connection) {
                 connection.destroy();
@@ -114,12 +108,9 @@ client.on('interactionCreate', async interaction => {
             await interaction.editReply('⛔ Radio zatrzymane');
         }
 
-        // 📻 STATUS
         if (interaction.customId === 'status') {
 
-            if (!interaction.deferred && !interaction.replied) {
-                await interaction.deferReply();
-            }
+            await interaction.deferReply();
 
             await interaction.editReply(
                 connection ? '📻 Radio gra' : '❌ Radio wyłączone'
@@ -131,7 +122,7 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// 🎧 RADIO
+// 🎧 RADIO (NAPRAWIONE AUDIO)
 function playRadio() {
 
     if (!player) return;
@@ -142,7 +133,7 @@ function playRadio() {
         '-reconnect_delay_max', '5',
         '-i', STREAM_URL,
         '-vn',
-        '-acodec', 'pcm_s16le',
+        '-loglevel', '0',
         '-f', 's16le',
         '-ar', '48000',
         '-ac', '2',
@@ -150,23 +141,29 @@ function playRadio() {
     ]);
 
     const resource = createAudioResource(ffmpeg.stdout, {
-        inputType: StreamType.Raw
+        inputType: StreamType.Raw,
+        inlineVolume: true
     });
+
+    // 🔥 KLUCZOWE – głośność
+    resource.volume.setVolume(1);
 
     player.removeAllListeners();
 
     player.play(resource);
 
+    // 🔍 DEBUG
+    player.on('stateChange', (oldState, newState) => {
+        console.log(`PLAYER: ${oldState.status} -> ${newState.status}`);
+    });
+
     player.on(AudioPlayerStatus.Idle, () => {
         setTimeout(playRadio, 1000);
     });
 
-    player.on('error', () => {
+    player.on('error', (err) => {
+        console.error('PLAYER ERROR:', err);
         setTimeout(playRadio, 1000);
-    });
-
-    ffmpeg.stderr.on('data', data => {
-        console.log('FFMPEG:', data.toString());
     });
 }
 
