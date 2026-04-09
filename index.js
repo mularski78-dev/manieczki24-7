@@ -18,7 +18,7 @@ const {
 const { spawn } = require('child_process');
 
 // =====================
-// EXPRESS (Render keep alive)
+// EXPRESS (Render fix)
 // =====================
 const app = express();
 app.get('/', (req, res) => res.send('Radio bot is alive'));
@@ -37,18 +37,29 @@ const client = new Client({
 });
 
 // =====================
-// GLOBAL STATE
+// STATE
 // =====================
 let connection;
 let player;
 let ffmpeg;
+let radioStarted = false;
 
 // =====================
 // STREAM
 // =====================
 const STREAM_URL = "http://stream.radioparty.pl:8000/radioparty";
 
+// =====================
+// RADIO START (FIXED)
+// =====================
 function startRadio() {
+
+    if (radioStarted) {
+        console.log("⚠️ Radio already running - skip");
+        return;
+    }
+
+    radioStarted = true;
 
     if (ffmpeg) {
         try { ffmpeg.kill('SIGKILL'); } catch {}
@@ -73,7 +84,7 @@ function startRadio() {
         player = createAudioPlayer();
 
         player.on(AudioPlayerStatus.Idle, () => {
-            console.log("🔁 Stream idle (no auto-restart spam)");
+            console.log("🔇 Idle (no restart loop)");
         });
 
         player.on('error', err => {
@@ -87,7 +98,7 @@ function startRadio() {
         connection.subscribe(player);
     }
 
-    console.log("🎧 Radio STARTED");
+    console.log("🎧 RADIO STARTED");
 }
 
 // =====================
@@ -98,7 +109,7 @@ client.once('ready', () => {
 });
 
 // =====================
-// BUTTON HANDLER (FIX 10062)
+// BUTTONS (FIX 10062)
 // =====================
 client.on('interactionCreate', async (interaction) => {
 
@@ -106,7 +117,6 @@ client.on('interactionCreate', async (interaction) => {
 
     try {
 
-        // 🔥 PROTECTION (10062 FIX)
         if (interaction.deferred || interaction.replied) return;
 
         await interaction.deferReply({ flags: 64 });
@@ -128,12 +138,11 @@ client.on('interactionCreate', async (interaction) => {
                 adapterCreator: channel.guild.voiceAdapterCreator
             });
 
-            // 🔥 WAŻNE: delay fix (stabilność voice)
             setTimeout(() => {
                 startRadio();
-            }, 500);
+            }, 800);
 
-            return interaction.editReply("▶️ Radio Party działa!");
+            return interaction.editReply("▶️ Radio działa!");
 
         }
 
@@ -142,24 +151,17 @@ client.on('interactionCreate', async (interaction) => {
         // =====================
         if (interaction.customId === 'stop') {
 
+            radioStarted = false;
+
             try { if (player) player.stop(); } catch {}
             try { if (connection) connection.destroy(); } catch {}
             try { if (ffmpeg) ffmpeg.kill('SIGKILL'); } catch {}
 
-            return interaction.editReply("⏹️ Radio zatrzymane");
+            return interaction.editReply("⏹️ Radio STOP");
         }
 
     } catch (err) {
         console.error("Interaction error:", err);
-
-        try {
-            if (!interaction.replied) {
-                await interaction.reply({
-                    content: "❌ Błąd interakcji",
-                    flags: 64
-                });
-            }
-        } catch {}
     }
 });
 
