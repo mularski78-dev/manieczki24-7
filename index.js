@@ -1,11 +1,4 @@
-const { 
-    Client, 
-    GatewayIntentBits, 
-    ActionRowBuilder, 
-    ButtonBuilder, 
-    ButtonStyle 
-} = require('discord.js');
-
+const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const {
     joinVoiceChannel,
     createAudioPlayer,
@@ -14,8 +7,13 @@ const {
     StreamType,
     NoSubscriberBehavior
 } = require('@discordjs/voice');
-
+const { spawn } = require('child_process');
 const express = require('express');
+
+// 🌐 24/7
+const app = express();
+app.get('/', (req, res) => res.send('Bot działa 24/7 🎧'));
+app.listen(process.env.PORT || 3000);
 
 // 🔑 BOT
 const client = new Client({
@@ -29,32 +27,14 @@ const client = new Client({
 
 const TOKEN = process.env.TOKEN;
 
-// 🔊 STREAM (radio)
-const STREAM_URL = 'http://stream.live.vc.bbcmedia.co.uk/bbc_radio_one';
+// 🔊 STREAM (TWÓJ)
+const STREAM_URL = 'https://forum.radioparty.pl:8005/stream64aac';
 
 let connection;
 let player;
 
-// 🌐 EXPRESS (NAPRAWIA TIMEOUT RENDER)
-const app = express();
-
-app.get("/", (req, res) => {
-    res.send("Radio bot działa 🚀");
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`🌐 Serwer działa na porcie ${PORT}`);
-});
-
-// 🔥 LOGI BŁĘDÓW (WAŻNE)
-process.on("uncaughtException", console.error);
-process.on("unhandledRejection", console.error);
-
 // 🎛️ PANEL
 client.on('messageCreate', async message => {
-    if (message.author.bot) return;
-
     if (message.content === '!panel') {
 
         const row = new ActionRowBuilder().addComponents(
@@ -64,14 +44,14 @@ client.on('messageCreate', async message => {
             new ButtonBuilder().setCustomId('status').setLabel('📻 Status').setStyle(ButtonStyle.Secondary)
         );
 
-        await message.channel.send({
+        message.channel.send({
             content: '📻 PANEL RADIA',
             components: [row]
         });
     }
 });
 
-// 🎛️ BUTTONY
+// 🎛️ OBSŁUGA PRZYCISKÓW
 client.on('interactionCreate', async interaction => {
     if (!interaction.isButton()) return;
 
@@ -79,67 +59,7 @@ client.on('interactionCreate', async interaction => {
 
     // ▶️ START
     if (interaction.customId === 'play') {
-        if (!channel) {
-            return interaction.reply({ content: '❌ Wejdź na voice!', ephemeral: true });
-        }
-
-        try {
-            if (connection) connection.destroy();
-
-            connection = joinVoiceChannel({
-                channelId: channel.id,
-                guildId: interaction.guild.id,
-                adapterCreator: interaction.guild.voiceAdapterCreator,
-                selfDeaf: false
-            });
-
-            player = createAudioPlayer({
-                behaviors: { noSubscriber: NoSubscriberBehavior.Play }
-            });
-
-            connection.subscribe(player);
-
-            const resource = createAudioResource(STREAM_URL, {
-                inputType: StreamType.Arbitrary
-            });
-
-            player.play(resource);
-
-            // 🔁 AUTO RECONNECT (WAŻNE)
-            player.on(AudioPlayerStatus.Idle, () => {
-                player.play(createAudioResource(STREAM_URL, {
-                    inputType: StreamType.Arbitrary
-                }));
-            });
-
-            await interaction.reply(`▶️ Radio gra na ${channel.name}`);
-
-        } catch (err) {
-            console.error(err);
-            interaction.reply({ content: '❌ Błąd podczas uruchamiania radia', ephemeral: true });
-        }
-    }
-
-    // ⛔ STOP
-    if (interaction.customId === 'stop') {
-        try {
-            if (connection) {
-                connection.destroy();
-                connection = null;
-            }
-
-            await interaction.reply('⛔ Radio zatrzymane');
-
-        } catch (err) {
-            console.error(err);
-        }
-    }
-
-    // 🔄 MOVE
-    if (interaction.customId === 'move') {
-        if (!channel) {
-            return interaction.reply({ content: '❌ Wejdź na voice!', ephemeral: true });
-        }
+        if (!channel) return interaction.reply({ content: '❌ Wejdź na voice!', ephemeral: true });
 
         if (connection) connection.destroy();
 
@@ -149,7 +69,43 @@ client.on('interactionCreate', async interaction => {
             adapterCreator: interaction.guild.voiceAdapterCreator
         });
 
-        await interaction.reply(`🔄 Przeniesiono na ${channel.name}`);
+        player = createAudioPlayer({
+            behaviors: { noSubscriber: NoSubscriberBehavior.Play }
+        });
+
+        connection.subscribe(player);
+
+        playRadio();
+
+        interaction.reply(`▶️ Radio gra na ${channel.name}`);
+    }
+
+    // ⛔ STOP
+    if (interaction.customId === 'stop') {
+        if (connection) {
+            connection.destroy();
+            connection = null;
+        }
+        if (player) player.stop();
+
+        interaction.reply('⛔ Radio zatrzymane');
+    }
+
+    // 🔄 MOVE
+    if (interaction.customId === 'move') {
+        if (!channel) return interaction.reply({ content: '❌ Wejdź na voice!', ephemeral: true });
+
+        if (connection) connection.destroy();
+
+        connection = joinVoiceChannel({
+            channelId: channel.id,
+            guildId: interaction.guild.id,
+            adapterCreator: interaction.guild.voiceAdapterCreator
+        });
+
+        connection.subscribe(player);
+
+        interaction.reply(`🔄 Przeniesiono na ${channel.name}`);
     }
 
     // 📻 STATUS
@@ -162,6 +118,44 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
+// 🎧 RADIO
+function playRadio() {
+
+    if (!player) return;
+
+    const ffmpeg = spawn('ffmpeg', [
+        '-reconnect', '1',
+        '-reconnect_streamed', '1',
+        '-reconnect_delay_max', '5',
+        '-i', STREAM_URL,
+        '-analyzeduration', '0',
+        '-loglevel', '0',
+        '-f', 's16le',
+        '-ar', '48000',
+        '-ac', '2',
+        'pipe:1'
+    ]);
+
+    const resource = createAudioResource(ffmpeg.stdout, {
+        inputType: StreamType.Raw
+    });
+
+    player.play(resource);
+
+    // 🔁 restart tylko raz
+    player.removeAllListeners(AudioPlayerStatus.Idle);
+    player.removeAllListeners('error');
+
+    player.on(AudioPlayerStatus.Idle, () => {
+        setTimeout(playRadio, 1000);
+    });
+
+    player.on('error', () => {
+        setTimeout(playRadio, 1000);
+    });
+}
+
+// ✅ READY
 client.once('ready', () => {
     console.log(`✅ Zalogowano jako ${client.user.tag}`);
 });
