@@ -2,16 +2,16 @@
   "name": "bot-muzyczny",
   "version": "1.0.0",
   "main": "index.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node index.js"
   },
-  "type": "commonjs",
   "dependencies": {
-    "discord.js": "^14.26.2",
-    "@discordjs/voice": "^0.19.2",
+    "discord.js": "^14.15.3",
+    "@discordjs/voice": "^0.17.0",
     "express": "^4.18.2",
     "ffmpeg-static": "^5.2.0",
-    "opusscript": "^0.0.8"
+    "opusscript": "^0.1.1"
   },
   "engines": {
     "node": "18.x"
