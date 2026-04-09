@@ -18,7 +18,7 @@ const {
 const { spawn } = require('child_process');
 
 // =====================
-// EXPRESS (FIX RENDER PORT)
+// EXPRESS (Render keep alive)
 // =====================
 const app = express();
 app.get('/', (req, res) => res.send('Radio bot is alive'));
@@ -30,21 +30,29 @@ app.listen(process.env.PORT || 3000, () => {
 // DISCORD BOT
 // =====================
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates]
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildVoiceStates
+    ]
 });
 
+// =====================
+// GLOBAL STATE
+// =====================
 let connection;
 let player;
 let ffmpeg;
 
 // =====================
-// RADIO STREAM
+// STREAM
 // =====================
 const STREAM_URL = "http://stream.radioparty.pl:8000/radioparty";
 
 function startRadio() {
 
-    if (ffmpeg) ffmpeg.kill('SIGKILL');
+    if (ffmpeg) {
+        try { ffmpeg.kill('SIGKILL'); } catch {}
+    }
 
     ffmpeg = spawn('ffmpeg', [
         '-reconnect', '1',
@@ -64,33 +72,33 @@ function startRadio() {
     if (!player) {
         player = createAudioPlayer();
 
-        // 🔁 AUTO RESTART
         player.on(AudioPlayerStatus.Idle, () => {
-            console.log("🔁 Restart radio...");
-            startRadio();
+            console.log("🔁 Stream idle (no auto-restart spam)");
         });
 
         player.on('error', err => {
             console.log("❌ Player error:", err.message);
-            startRadio();
         });
     }
 
     player.play(resource);
-    connection.subscribe(player);
+
+    if (connection) {
+        connection.subscribe(player);
+    }
 
     console.log("🎧 Radio STARTED");
 }
 
 // =====================
-// BOT READY
+// READY
 // =====================
 client.once('ready', () => {
     console.log(`✅ Logged as ${client.user.tag}`);
 });
 
 // =====================
-// BUTTONS (FIX 10062)
+// BUTTON HANDLER (FIX 10062)
 // =====================
 client.on('interactionCreate', async (interaction) => {
 
@@ -98,12 +106,18 @@ client.on('interactionCreate', async (interaction) => {
 
     try {
 
-        // 🔥 MUST BE FIRST (fix 10062)
+        // 🔥 PROTECTION (10062 FIX)
+        if (interaction.deferred || interaction.replied) return;
+
         await interaction.deferReply({ flags: 64 });
 
+        // =====================
+        // START
+        // =====================
         if (interaction.customId === 'start') {
 
             const channel = interaction.member.voice.channel;
+
             if (!channel) {
                 return interaction.editReply("❌ Wejdź na voice channel");
             }
@@ -114,28 +128,43 @@ client.on('interactionCreate', async (interaction) => {
                 adapterCreator: channel.guild.voiceAdapterCreator
             });
 
-            startRadio();
+            // 🔥 WAŻNE: delay fix (stabilność voice)
+            setTimeout(() => {
+                startRadio();
+            }, 500);
 
             return interaction.editReply("▶️ Radio Party działa!");
 
         }
 
+        // =====================
+        // STOP
+        // =====================
         if (interaction.customId === 'stop') {
 
-            if (player) player.stop();
-            if (connection) connection.destroy();
-            if (ffmpeg) ffmpeg.kill('SIGKILL');
+            try { if (player) player.stop(); } catch {}
+            try { if (connection) connection.destroy(); } catch {}
+            try { if (ffmpeg) ffmpeg.kill('SIGKILL'); } catch {}
 
             return interaction.editReply("⏹️ Radio zatrzymane");
         }
 
     } catch (err) {
         console.error("Interaction error:", err);
+
+        try {
+            if (!interaction.replied) {
+                await interaction.reply({
+                    content: "❌ Błąd interakcji",
+                    flags: 64
+                });
+            }
+        } catch {}
     }
 });
 
 // =====================
-// COMMAND PANEL
+// SLASH COMMAND /radio
 // =====================
 client.on('interactionCreate', async (interaction) => {
 
