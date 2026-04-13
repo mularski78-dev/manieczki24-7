@@ -1,13 +1,14 @@
-const ffmpeg = require('ffmpeg-static');
+const ffmpeg = require("ffmpeg-static");
 process.env.FFMPEG_PATH = ffmpeg;
 
-const { Client, GatewayIntentBits } = require('discord.js');
+const playdl = require("play-dl");
+
+const { Client, GatewayIntentBits } = require("discord.js");
 const {
   joinVoiceChannel,
   createAudioPlayer,
-  createAudioResource,
-  StreamType
-} = require('@discordjs/voice');
+  createAudioResource
+} = require("@discordjs/voice");
 
 const client = new Client({
   intents: [
@@ -21,18 +22,22 @@ const client = new Client({
 const prefix = "!";
 const player = createAudioPlayer();
 
-// 🔥 TWÓJ LINK RADIA
+// 🔥 RADIO LINK
 const RADIO_URL = "https://radioparty.pl:8015/energy2000";
 
-client.once('ready', () => {
+client.once("ready", () => {
   console.log("✅ Bot działa (radio)");
 });
 
-client.on('messageCreate', async (message) => {
-  if (!message.content.startsWith(prefix) || message.author.bot) return;
+client.on("messageCreate", async (message) => {
+  if (message.author.bot) return;
+  if (!message.content.startsWith(prefix)) return;
 
-  if (message.content === "!radio") {
+  const args = message.content.slice(prefix.length).trim().split(/ +/);
+  const command = args.shift().toLowerCase();
 
+  // 🎵 RADIO START
+  if (command === "radio") {
     const channel = message.member.voice.channel;
     if (!channel) return message.reply("❌ Wejdź na voice!");
 
@@ -43,9 +48,10 @@ client.on('messageCreate', async (message) => {
         adapterCreator: message.guild.voiceAdapterCreator
       });
 
-      const resource = createAudioResource(RADIO_URL, {
-        inputType: StreamType.Arbitrary,
-        inlineVolume: true
+      const stream = await playdl.stream(RADIO_URL);
+
+      const resource = createAudioResource(stream.stream, {
+        inputType: stream.type
       });
 
       player.play(resource);
@@ -56,6 +62,12 @@ client.on('messageCreate', async (message) => {
       console.error(err);
       message.reply("❌ Błąd radia");
     }
+  }
+
+  // 🛑 STOP RADIO
+  if (command === "stop") {
+    player.stop();
+    message.reply("🛑 Radio zatrzymane");
   }
 });
 
