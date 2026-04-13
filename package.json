@@ -1,20 +1,20 @@
 {
   "name": "bot-muzyczny",
   "version": "1.0.0",
+  "description": "",
   "main": "index.js",
-  "type": "commonjs",
   "scripts": {
-    "start": "node index.js"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
   "dependencies": {
-    "discord.js": "^14.15.3",
-    "@discordjs/voice": "^0.17.0",
-    "express": "^4.18.2",
-    "ffmpeg-static": "^5.2.0",
-    "opusscript": "^0.1.1",
-    "dotenv": "^16.4.5"
-  },
-  "engines": {
-    "node": "18.x"
+    "@discordjs/voice": "^0.19.2",
+    "discord.js": "^14.26.2",
+    "ffmpeg-static": "^5.3.0",
+    "opusscript": "^0.0.8",
+    "play-dl": "^1.9.7"
   }
 }
