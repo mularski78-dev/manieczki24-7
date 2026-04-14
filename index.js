@@ -10,6 +10,19 @@ const {
   createAudioResource
 } = require("@discordjs/voice");
 
+const express = require("express");
+const app = express();
+
+// 🌐 WEB SERVER (WYMAGANY NA RENDER)
+app.get("/", (req, res) => {
+  res.send("Bot działa!");
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🌍 Serwer działa na porcie ${PORT}`);
+});
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -71,4 +84,5 @@ client.on("messageCreate", async (message) => {
   }
 });
 
+// ❗ WAŻNE: TOKEN Z RENDER ENV
 client.login(process.env.TOKEN);
