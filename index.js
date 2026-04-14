@@ -1,21 +1,21 @@
 const ffmpeg = require("ffmpeg-static");
 process.env.FFMPEG_PATH = ffmpeg;
 
-const playdl = require("play-dl");
-
 const { Client, GatewayIntentBits } = require("discord.js");
 const {
   joinVoiceChannel,
   createAudioPlayer,
-  createAudioResource
+  createAudioResource,
+  AudioPlayerStatus,
+  NoSubscriberBehavior
 } = require("@discordjs/voice");
 
 const express = require("express");
 const app = express();
 
-// 🌐 WEB SERVER (WYMAGANY NA RENDER)
+// 🌐 WEB SERVER (Render wymaga)
 app.get("/", (req, res) => {
-  res.send("Bot działa!");
+  res.send("Bot działa 24/7!");
 });
 
 const PORT = process.env.PORT || 3000;
@@ -33,12 +33,18 @@ const client = new Client({
 });
 
 const prefix = "!";
-const player = createAudioPlayer();
+
+// 🎵 PLAYER (stabilniejszy)
+const player = createAudioPlayer({
+  behaviors: {
+    noSubscriber: NoSubscriberBehavior.Play
+  }
+});
 
 // 🔥 RADIO LINK
 const RADIO_URL = "https://radioparty.pl:8015/energy2000";
 
-client.once("ready", () => {
+client.once("clientReady", () => {
   console.log("✅ Bot działa (radio)");
 });
 
@@ -61,11 +67,7 @@ client.on("messageCreate", async (message) => {
         adapterCreator: message.guild.voiceAdapterCreator
       });
 
-      const stream = await playdl.stream(RADIO_URL);
-
-      const resource = createAudioResource(stream.stream, {
-        inputType: stream.type
-      });
+      const resource = createAudioResource(RADIO_URL);
 
       player.play(resource);
       connection.subscribe(player);
@@ -77,12 +79,26 @@ client.on("messageCreate", async (message) => {
     }
   }
 
-  // 🛑 STOP RADIO
+  // 🛑 STOP
   if (command === "stop") {
     player.stop();
     message.reply("🛑 Radio zatrzymane");
   }
 });
 
-// ❗ WAŻNE: TOKEN Z RENDER ENV
+// 🔁 AUTO RESTART (jak się zatrzyma)
+player.on(AudioPlayerStatus.Idle, () => {
+  console.log("🔄 Strumień zatrzymany");
+});
+
+player.on("error", error => {
+  console.error("❌ Błąd playera:", error.message);
+});
+
+// 🔑 TOKEN z Render ENV
+if (!process.env.TOKEN) {
+  console.log("❌ BRAK TOKENA!");
+  process.exit(1);
+}
+
 client.login(process.env.TOKEN);
